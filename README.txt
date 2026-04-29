@@ -4,12 +4,12 @@ LOCAL WEB SETUP:
 
 1. Install Python 3.10 or newer.
 
-2. Open a terminal in the project root and install the backend dependencies:
+2. Open a terminal in the project root and install the backend dependencies if needed:
    cd backend
    pip install fastapi uvicorn numpy python-multipart
 
-3. Start the local backend and web UI:
-   python -m uvicorn main:app --host 127.0.0.1 --port 8765
+3. From the project root, start the local backend and web UI:
+   npm run local
 
 4. Open the browser at:
    http://127.0.0.1:8765

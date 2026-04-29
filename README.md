@@ -1,4 +1,4 @@
-Fastest start: open PowerShell in this folder and run Start-Local.ps1. It waits for the website to be ready, then opens http://127.0.0.1:8765/ automatically.
+Fastest start: open a terminal in this folder and run `npm run local`. It waits for the website to be ready, then opens http://127.0.0.1:8765/ automatically.
 
 # Voice Biometric Authentication System
 
@@ -20,12 +20,13 @@ Default admin passcode: 5846
 
 ## How to use
 
-1. Start the app with `Start-Local.ps1`.
-2. Open http://127.0.0.1:8765/ if the browser does not open automatically.
-3. Allow microphone access.
-4. Use Voice access to test a login.
-5. Use Register member to enroll someone.
-6. Unlock the dashboard with the admin passcode to review logs and members.
+1. Run `npm install` once if dependencies are missing.
+2. Start the app with `npm run local`.
+3. Open http://127.0.0.1:8765/ if the browser does not open automatically.
+4. Allow microphone access.
+5. Use Voice access to test a login.
+6. Use Register member to enroll someone.
+7. Unlock the dashboard with the admin passcode to review logs and members.
 
 ## One-time setup on a new machine
 
