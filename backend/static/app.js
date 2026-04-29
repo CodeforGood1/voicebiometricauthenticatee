@@ -589,7 +589,7 @@ async function bootstrap() {
     await refreshOverview();
     setRuntimeNote('Backend is reachable. All capture and processing stays on this machine.');
   } catch (error) {
-    setRuntimeNote('Start the FastAPI backend on port 8000, then refresh this page.');
+    setRuntimeNote('Start the FastAPI backend on port 8765, then refresh this page.');
     setGlobalStatus(error.message || 'Local backend is not reachable.', 'danger');
   }
 

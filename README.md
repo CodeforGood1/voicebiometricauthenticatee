@@ -1,4 +1,4 @@
-Fastest start: open PowerShell in this folder and run Start-Local.ps1, then open http://127.0.0.1:8000 if the browser does not open automatically.
+Fastest start: open PowerShell in this folder and run Start-Local.ps1. It waits for the website to be ready, then opens http://127.0.0.1:8765/ automatically.
 
 # Voice Biometric Authentication System
 
@@ -21,7 +21,7 @@ Default admin passcode: 5846
 ## How to use
 
 1. Start the app with `Start-Local.ps1`.
-2. Open http://127.0.0.1:8000 if the browser does not open automatically.
+2. Open http://127.0.0.1:8765/ if the browser does not open automatically.
 3. Allow microphone access.
 4. Use Voice access to test a login.
 5. Use Register member to enroll someone.

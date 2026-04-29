@@ -7,12 +7,12 @@ import { Platform } from "react-native";
 const getBaseUrl = () => {
   if (Platform.OS === "web") {
     if (typeof window !== "undefined") {
-      return `http://${window.location.hostname}:8000`;
+      return `http://${window.location.hostname}:8765`;
     }
-    return "http://localhost:8000";
+    return "http://localhost:8765";
   }
 
-  return process.env.EXPO_PUBLIC_API_URL || "http://192.168.1.5:8000";
+  return process.env.EXPO_PUBLIC_API_URL || "http://192.168.1.5:8765";
 };
 
 const BASE_URL = getBaseUrl();

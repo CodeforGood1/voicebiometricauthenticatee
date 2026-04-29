@@ -9,10 +9,10 @@ LOCAL WEB SETUP:
    pip install fastapi uvicorn numpy python-multipart
 
 3. Start the local backend and web UI:
-   python -m uvicorn main:app --host 127.0.0.1 --port 8000
+   python -m uvicorn main:app --host 127.0.0.1 --port 8765
 
 4. Open the browser at:
-   http://127.0.0.1:8000
+   http://127.0.0.1:8765
 
 LOCAL FEATURES:
 
