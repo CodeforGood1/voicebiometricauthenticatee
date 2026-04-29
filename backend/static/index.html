@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="dark" />
+  <title>Voice Biometric Local</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="backdrop backdrop-a"></div>
+  <div class="backdrop backdrop-b"></div>
+
+  <main class="shell">
+    <header class="hero">
+      <div class="hero-copy">
+        <p class="eyebrow">Local offline access control</p>
+        <h1>Voice Biometric Access</h1>
+        <p class="lede">
+          This system runs entirely on the local machine. The browser records voice samples,
+          FastAPI performs the biometric comparison, and SQLite stores members and access logs.
+        </p>
+        <div class="hero-badges">
+          <span class="badge">Browser audio capture</span>
+          <span class="badge">Local voice processing</span>
+          <span class="badge">SQLite database</span>
+          <span class="badge">No cloud dependency</span>
+        </div>
+      </div>
+      <aside class="hero-panel">
+        <div class="hero-panel-label">Runtime</div>
+        <div class="hero-panel-value">Offline local stack</div>
+        <div class="hero-panel-note" id="runtime-note">Start the FastAPI backend, then open this page in the browser.</div>
+        <div class="hero-panel-grid">
+          <div>
+            <span id="stat-total-members">0</span>
+            <label>Total members</label>
+          </div>
+          <div>
+            <span id="stat-active-members">0</span>
+            <label>Active members</label>
+          </div>
+          <div>
+            <span id="stat-log-count">0</span>
+            <label>Access logs</label>
+          </div>
+          <div>
+            <span id="stat-database">local</span>
+            <label>Database</label>
+          </div>
+        </div>
+      </aside>
+    </header>
+
+    <div class="status-banner" id="global-status">Ready for local capture.</div>
+
+    <section class="grid">
+      <article class="card card-accent">
+        <div class="card-kicker">1. Authenticate</div>
+        <h2>Voice access</h2>
+        <p>
+          Speak naturally for four seconds. The browser records a WAV clip, then the local backend
+          matches it against enrolled voice samples.
+        </p>
+        <div class="result-pill" id="auth-result">Idle</div>
+        <div class="button-row">
+          <button class="primary" id="auth-btn">Record and verify</button>
+          <button class="ghost" id="auth-clear-btn">Clear</button>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="card-kicker">2. Enroll</div>
+        <h2>Register member</h2>
+        <p>
+          Add a person, capture five voice samples, and store the embeddings locally in SQLite.
+        </p>
+        <div class="form-grid">
+          <label>
+            Full name
+            <input id="member-name" type="text" placeholder="Jane Doe" autocomplete="name" />
+          </label>
+          <label>
+            Employee ID
+            <input id="member-id" type="text" placeholder="EMP-001" autocomplete="off" />
+          </label>
+        </div>
+        <div class="sample-meta">
+          <div id="sample-count">0 of 5 samples captured</div>
+          <button class="ghost small" id="reset-samples-btn" type="button">Reset samples</button>
+        </div>
+        <div class="sample-strip" id="sample-strip"></div>
+        <div class="button-row">
+          <button class="secondary" id="sample-btn">Record sample 1</button>
+          <button class="primary" id="save-btn">Save member</button>
+        </div>
+        <div class="helper" id="enroll-message">Capture five samples before saving.</div>
+      </article>
+
+      <article class="card card-wide">
+        <div class="card-head">
+          <div>
+            <div class="card-kicker">3. Admin</div>
+            <h2>Local dashboard</h2>
+          </div>
+          <span class="badge badge-strong">Protected</span>
+        </div>
+        <p>
+          Unlock the dashboard with the local admin passcode to view members and access logs.
+        </p>
+
+        <div class="admin-login" id="admin-login">
+          <input id="admin-passcode" type="password" inputmode="numeric" placeholder="Admin passcode" />
+          <button class="primary" id="admin-login-btn">Unlock dashboard</button>
+        </div>
+
+        <div class="admin-dashboard hidden" id="admin-dashboard">
+          <div class="button-row dashboard-actions">
+            <button class="ghost" id="refresh-admin-btn">Refresh data</button>
+            <button class="ghost" id="logout-btn">Lock dashboard</button>
+          </div>
+
+          <div class="panel-grid">
+            <section class="subpanel">
+              <div class="subpanel-head">
+                <h3>Members</h3>
+                <span class="subpanel-note">Active entries only</span>
+              </div>
+              <div class="list" id="members-list"></div>
+            </section>
+
+            <section class="subpanel">
+              <div class="subpanel-head">
+                <h3>Access logs</h3>
+                <span class="subpanel-note">Latest 50</span>
+              </div>
+              <div class="list" id="logs-list"></div>
+            </section>
+          </div>
+        </div>
+      </article>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
