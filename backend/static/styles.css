@@ -420,6 +420,9 @@ input:focus {
 
 .admin-dashboard {
   margin-top: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
 }
 
 .hidden {

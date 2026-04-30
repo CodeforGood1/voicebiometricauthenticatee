@@ -45,7 +45,7 @@ function setRuntimeNote(message) {
 function updateSampleUi() {
   const count = state.samples.length;
   els.sampleCount.textContent = `${count} of ${SAMPLE_TARGET} samples captured`;
-  els.sampleBtn.textContent = count >= SAMPLE_TARGET ? 'Sample limit reached' : `Record sample ${count + 1}`;
+  els.sampleBtn.textContent = count >= SAMPLE_TARGET ? 'Sample limit reached' : `Capture sample ${count + 1}`;
   els.sampleBtn.disabled = state.recording || count >= SAMPLE_TARGET;
   els.saveBtn.disabled = count < SAMPLE_TARGET || state.recording;
   els.resetSamplesBtn.disabled = state.recording || count === 0;
@@ -200,7 +200,7 @@ function renderStats(stats) {
   els.totalMembers.textContent = String(stats.total_members ?? 0);
   els.activeMembers.textContent = String(stats.active_members ?? 0);
   els.logCount.textContent = String(stats.log_count ?? 0);
-  els.databaseName.textContent = stats.database || 'local';
+  els.databaseName.textContent = stats.platform || 'Operational';
 }
 
 function renderMembers(members) {
@@ -309,7 +309,7 @@ async function refreshAdminData() {
   renderStats(stats);
 
   if (state.adminAuthed) {
-    setGlobalStatus('Local dashboard refreshed.', 'success');
+    setGlobalStatus('Dashboard refreshed.', 'success');
   }
 }
 
@@ -322,12 +322,12 @@ async function authenticateVoice() {
   els.authBtn.disabled = true;
   els.authClearBtn.disabled = true;
   setAuthResult('Recording audio...', 'warning');
-  setGlobalStatus('Capturing voice sample locally.', 'warning');
+  setGlobalStatus('Capturing voice sample.', 'warning');
 
   try {
     const audioBase64 = await recordWavBase64();
-    setAuthResult('Processing locally...', 'warning');
-    setGlobalStatus('Sending the local sample to the voice matcher.', 'warning');
+    setAuthResult('Processing sample...', 'warning');
+    setGlobalStatus('Submitting sample for verification.', 'warning');
 
     const result = await requestJson('/api/verify', {
       method: 'POST',
@@ -362,7 +362,7 @@ async function authenticateVoice() {
 
 function clearAuthResult() {
   setAuthResult('Idle', 'neutral');
-  setGlobalStatus('Ready for local capture.', 'neutral');
+  setGlobalStatus('Ready for verification.', 'neutral');
 }
 
 function resetSamples() {
@@ -395,7 +395,7 @@ async function recordSample() {
   state.recording = true;
   updateSampleUi();
   setEnrollMessage(`Recording sample ${state.samples.length + 1}...`, 'warning');
-  setGlobalStatus('Capturing an enrollment sample locally.', 'warning');
+  setGlobalStatus('Capturing an enrollment sample.', 'warning');
 
   try {
     const audioBase64 = await recordWavBase64();
@@ -431,8 +431,8 @@ async function saveMember() {
   }
 
   els.saveBtn.disabled = true;
-  setEnrollMessage('Saving member to the local database...', 'warning');
-  setGlobalStatus('Writing enrollment to SQLite.', 'warning');
+  setEnrollMessage('Saving member record...', 'warning');
+  setGlobalStatus('Writing enrollment record.', 'warning');
 
   try {
     const response = await requestJson('/api/members/enroll', {
@@ -447,7 +447,7 @@ async function saveMember() {
       }),
     });
 
-    setEnrollMessage(`Member ${response.member.name} saved locally.`, 'success');
+    setEnrollMessage(`Member ${response.member.name} enrolled successfully.`, 'success');
     setGlobalStatus(`Member ${response.member.name} enrolled successfully.`, 'success');
     els.memberName.value = '';
     els.memberId.value = '';
@@ -473,7 +473,7 @@ async function loginAdmin() {
     return;
   }
 
-  setGlobalStatus('Checking admin passcode locally.', 'warning');
+  setGlobalStatus('Checking administrator passcode.', 'warning');
 
   try {
     const result = await requestJson('/api/admin/login', {
@@ -494,6 +494,7 @@ async function loginAdmin() {
     els.adminPasscode.value = '';
     setDashboardVisible(true);
     setGlobalStatus('Dashboard unlocked.', 'success');
+    setEnrollMessage('Administrator access granted. Enroll members using the form below.', 'success');
     await refreshAdminData();
   } catch (error) {
     setGlobalStatus(error.message || 'Unable to unlock dashboard.', 'danger');
@@ -503,6 +504,11 @@ async function loginAdmin() {
 function logoutAdmin() {
   state.adminAuthed = false;
   localStorage.removeItem(AUTH_KEY);
+  state.samples = [];
+  els.memberName.value = '';
+  els.memberId.value = '';
+  updateSampleUi();
+  setEnrollMessage('Administrator access required to enroll members.', 'neutral');
   setDashboardVisible(false);
   setGlobalStatus('Dashboard locked.', 'neutral');
 }
@@ -584,10 +590,16 @@ async function bootstrap() {
   updateSampleUi();
   setDashboardVisible(state.adminAuthed);
   clearAuthResult();
+  setEnrollMessage(
+    state.adminAuthed
+      ? 'Administrator access granted. Enroll members using the form below.'
+      : 'Administrator access required to enroll members.',
+    state.adminAuthed ? 'success' : 'neutral'
+  );
 
   try {
     await refreshOverview();
-    setRuntimeNote('Backend is reachable. All capture and processing stays on this machine.');
+    setRuntimeNote('The dashboard is ready. Administrators can manage members and review activity.');
   } catch (error) {
     setRuntimeNote('Start the FastAPI backend on port 8765, then refresh this page.');
     setGlobalStatus(error.message || 'Local backend is not reachable.', 'danger');

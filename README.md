@@ -2,16 +2,16 @@ Fastest start: open a terminal in this folder and run `npm run local`. It waits 
 
 # Voice Biometric Authentication System
 
-This project is a local offline voice access-control web app.
+This project provides a voice biometric access control web app.
 
-It does not need Supabase or any cloud service at runtime. The browser records the voice sample, FastAPI processes it locally, and SQLite stores members and access logs on the same machine.
+The browser records voice samples, FastAPI handles verification, and SQLite stores member records and access logs.
 
 ## What it does
 
 - Voice authentication for access control
-- Member enrollment with five voice samples
-- Local admin dashboard for members and access logs
-- Local SQLite storage
+- Administrator-managed member enrollment
+- Admin dashboard for members and access logs
+- Member and access record storage
 - Browser-based UI served by FastAPI
 
 ## Admin passcode
@@ -25,8 +25,7 @@ Default admin passcode: 5846
 3. Open http://127.0.0.1:8765/ if the browser does not open automatically.
 4. Allow microphone access.
 5. Use Voice access to test a login.
-6. Use Register member to enroll someone.
-7. Unlock the dashboard with the admin passcode to review logs and members.
+6. Unlock the dashboard with the admin passcode to enroll members and review logs.
 
 ## One-time setup on a new machine
 
@@ -37,7 +36,7 @@ cd backend
 python -m pip install -r requirements.txt
 ```
 
-After that, the app can run locally without an internet connection as long as the required packages are already installed.
+After that, the app can run as long as the required packages are already installed.
 
 ## Local files of interest
 

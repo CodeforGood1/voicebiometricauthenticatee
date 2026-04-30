@@ -332,8 +332,8 @@ def health() -> dict[str, Any]:
 
     return {
         "status": "ok",
-        "mode": "local-offline",
-        "database": str(DB_PATH.name),
+        "mode": "operational",
+        "platform": "Operational",
         "total_members": member_count,
         "active_members": active_count,
         "log_count": log_count,
@@ -351,7 +351,7 @@ def stats() -> dict[str, Any]:
         "total_members": total_members,
         "active_members": active_members,
         "log_count": log_count,
-        "database": str(DB_PATH.name),
+        "platform": "Operational",
     }
 
 

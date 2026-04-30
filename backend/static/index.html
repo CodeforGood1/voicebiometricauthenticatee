@@ -14,23 +14,22 @@
   <main class="shell">
     <header class="hero">
       <div class="hero-copy">
-        <p class="eyebrow">Local offline access control</p>
+        <p class="eyebrow">Access control platform</p>
         <h1>Voice Biometric Access</h1>
         <p class="lede">
-          This system runs entirely on the local machine. The browser records voice samples,
-          FastAPI performs the biometric comparison, and SQLite stores members and access logs.
+          Verify identities, manage member enrollment, and review access activity from a single
+          secure dashboard.
         </p>
         <div class="hero-badges">
-          <span class="badge">Browser audio capture</span>
-          <span class="badge">Local voice processing</span>
-          <span class="badge">SQLite database</span>
-          <span class="badge">No cloud dependency</span>
+          <span class="badge">Identity verification</span>
+          <span class="badge">Member administration</span>
+          <span class="badge">Access audit</span>
         </div>
       </div>
       <aside class="hero-panel">
-        <div class="hero-panel-label">Runtime</div>
-        <div class="hero-panel-value">Offline local stack</div>
-        <div class="hero-panel-note" id="runtime-note">Start the FastAPI backend, then open this page in the browser.</div>
+        <div class="hero-panel-label">System status</div>
+        <div class="hero-panel-value">Platform ready</div>
+        <div class="hero-panel-note" id="runtime-note">Administrators can unlock the console to manage members and review activity.</div>
         <div class="hero-panel-grid">
           <div>
             <span id="stat-total-members">0</span>
@@ -45,73 +44,46 @@
             <label>Access logs</label>
           </div>
           <div>
-            <span id="stat-database">local</span>
-            <label>Database</label>
+            <span id="stat-database">Operational</span>
+            <label>Platform</label>
           </div>
         </div>
       </aside>
     </header>
 
-    <div class="status-banner" id="global-status">Ready for local capture.</div>
+    <div class="status-banner" id="global-status">Ready for verification.</div>
 
     <section class="grid">
       <article class="card card-accent">
         <div class="card-kicker">1. Authenticate</div>
         <h2>Voice access</h2>
         <p>
-          Speak naturally for four seconds. The browser records a WAV clip, then the local backend
-          matches it against enrolled voice samples.
+          Speak naturally for four seconds. The browser records a sample and submits it for
+          verification.
         </p>
         <div class="result-pill" id="auth-result">Idle</div>
         <div class="button-row">
-          <button class="primary" id="auth-btn">Record and verify</button>
+          <button class="primary" id="auth-btn">Verify identity</button>
           <button class="ghost" id="auth-clear-btn">Clear</button>
         </div>
-      </article>
-
-      <article class="card">
-        <div class="card-kicker">2. Enroll</div>
-        <h2>Register member</h2>
-        <p>
-          Add a person, capture five voice samples, and store the embeddings locally in SQLite.
-        </p>
-        <div class="form-grid">
-          <label>
-            Full name
-            <input id="member-name" type="text" placeholder="Jane Doe" autocomplete="name" />
-          </label>
-          <label>
-            Employee ID
-            <input id="member-id" type="text" placeholder="EMP-001" autocomplete="off" />
-          </label>
-        </div>
-        <div class="sample-meta">
-          <div id="sample-count">0 of 5 samples captured</div>
-          <button class="ghost small" id="reset-samples-btn" type="button">Reset samples</button>
-        </div>
-        <div class="sample-strip" id="sample-strip"></div>
-        <div class="button-row">
-          <button class="secondary" id="sample-btn">Record sample 1</button>
-          <button class="primary" id="save-btn">Save member</button>
-        </div>
-        <div class="helper" id="enroll-message">Capture five samples before saving.</div>
       </article>
 
       <article class="card card-wide">
         <div class="card-head">
           <div>
-            <div class="card-kicker">3. Admin</div>
-            <h2>Local dashboard</h2>
+            <div class="card-kicker">2. Admin</div>
+            <h2>Administrative console</h2>
           </div>
           <span class="badge badge-strong">Protected</span>
         </div>
         <p>
-          Unlock the dashboard with the local admin passcode to view members and access logs.
+          Unlock the dashboard with the administrator passcode to manage members and review
+          activity.
         </p>
 
         <div class="admin-login" id="admin-login">
           <input id="admin-passcode" type="password" inputmode="numeric" placeholder="Admin passcode" />
-          <button class="primary" id="admin-login-btn">Unlock dashboard</button>
+          <button class="primary" id="admin-login-btn">Open dashboard</button>
         </div>
 
         <div class="admin-dashboard hidden" id="admin-dashboard">
@@ -119,6 +91,39 @@
             <button class="ghost" id="refresh-admin-btn">Refresh data</button>
             <button class="ghost" id="logout-btn">Lock dashboard</button>
           </div>
+
+          <section class="subpanel enroll-panel">
+            <div class="subpanel-head">
+              <div>
+                <h3>Enroll member</h3>
+                <span class="subpanel-note">Administrator only</span>
+              </div>
+            </div>
+            <p>
+              Capture five voice samples and create a new access profile from the administrator
+              console.
+            </p>
+            <div class="form-grid">
+              <label>
+                Full name
+                <input id="member-name" type="text" placeholder="Jane Doe" autocomplete="name" />
+              </label>
+              <label>
+                Employee ID
+                <input id="member-id" type="text" placeholder="EMP-001" autocomplete="off" />
+              </label>
+            </div>
+            <div class="sample-meta">
+              <div id="sample-count">0 of 5 samples captured</div>
+              <button class="ghost small" id="reset-samples-btn" type="button">Clear samples</button>
+            </div>
+            <div class="sample-strip" id="sample-strip"></div>
+            <div class="button-row">
+              <button class="secondary" id="sample-btn">Capture sample 1</button>
+              <button class="primary" id="save-btn">Save member</button>
+            </div>
+            <div class="helper" id="enroll-message">Administrator access required to enroll members.</div>
+          </section>
 
           <div class="panel-grid">
             <section class="subpanel">
