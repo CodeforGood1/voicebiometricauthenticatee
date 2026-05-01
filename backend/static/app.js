@@ -1,4 +1,5 @@
 const AUTH_KEY = 'voicebiometric.admin.authed';
+const PASSCODE_KEY = 'voicebiometric.admin.passcode';
 const SAMPLE_TARGET = 5;
 const RECORDING_SECONDS = 4;
 
@@ -6,6 +7,7 @@ const state = {
   samples: [],
   recording: false,
   adminAuthed: localStorage.getItem(AUTH_KEY) === '1',
+  adminPasscode: localStorage.getItem(PASSCODE_KEY) || '',
 };
 
 const els = {};
@@ -435,6 +437,11 @@ async function saveMember() {
   setGlobalStatus('Writing enrollment record.', 'warning');
 
   try {
+    if (!state.adminPasscode) {
+      setEnrollMessage('Unlock the admin dashboard again before saving members.', 'warning');
+      return;
+    }
+
     const response = await requestJson('/api/members/enroll', {
       method: 'POST',
       headers: {
@@ -444,6 +451,7 @@ async function saveMember() {
         name,
         employee_id: employeeId,
         samples: state.samples,
+        admin_passcode: state.adminPasscode,
       }),
     });
 
@@ -490,7 +498,9 @@ async function loginAdmin() {
     }
 
     state.adminAuthed = true;
+    state.adminPasscode = passcode;
     localStorage.setItem(AUTH_KEY, '1');
+    localStorage.setItem(PASSCODE_KEY, passcode);
     els.adminPasscode.value = '';
     setDashboardVisible(true);
     setGlobalStatus('Dashboard unlocked.', 'success');
@@ -503,7 +513,9 @@ async function loginAdmin() {
 
 function logoutAdmin() {
   state.adminAuthed = false;
+  state.adminPasscode = '';
   localStorage.removeItem(AUTH_KEY);
+  localStorage.removeItem(PASSCODE_KEY);
   state.samples = [];
   els.memberName.value = '';
   els.memberId.value = '';

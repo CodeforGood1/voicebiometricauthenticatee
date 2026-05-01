@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -22,8 +22,11 @@ BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 DB_PATH = BASE_DIR / "voicebiometric.sqlite3"
 DEFAULT_ADMIN_PASSCODE = "5846"
-VERIFY_THRESHOLD = 0.85
+VERIFY_THRESHOLD = 0.94
 MIN_VALID_SCORE = 0.65
+REQUIRED_SAMPLE_MATCHES = 4
+PER_SAMPLE_MATCH_THRESHOLD = 0.9
+MAX_SCORE_SPREAD = 0.08
 
 STATIC_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -36,6 +39,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+
+@app.middleware("http")
+async def disable_cache(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
 
 
 def get_connection() -> sqlite3.Connection:
@@ -153,90 +165,114 @@ def load_wav_samples(wav_path: Path) -> tuple[np.ndarray, int]:
 
 def extract_voice_features(samples: np.ndarray, sample_rate: int) -> np.ndarray:
     waveform = np.asarray(samples, dtype=np.float32).copy()
+    if waveform.size == 0:
+        raise HTTPException(status_code=400, detail="Empty audio sample")
+
     waveform -= float(np.mean(waveform))
 
     peak = float(np.max(np.abs(waveform))) if waveform.size else 0.0
     if peak > 0:
         waveform /= peak
 
+    pre_emphasis = 0.97
+    emphasized = np.empty_like(waveform)
+    emphasized[0] = waveform[0]
+    if waveform.size > 1:
+        emphasized[1:] = waveform[1:] - pre_emphasis * waveform[:-1]
+
+    duration = float(emphasized.size) / max(float(sample_rate), 1.0)
+    frame_length = max(int(sample_rate * 0.025), 1)
+    hop_length = max(int(sample_rate * 0.010), 1)
+    if emphasized.size < frame_length:
+        emphasized = np.pad(emphasized, (0, frame_length - emphasized.size))
+
+    n_fft = 1
+    while n_fft < frame_length:
+        n_fft *= 2
+    n_fft = max(n_fft, 512)
+
+    window = np.hanning(frame_length).astype(np.float32)
+    spectra: list[np.ndarray] = []
+    frame_energies: list[float] = []
+    frame_zcrs: list[float] = []
+
+    for start in range(0, emphasized.size - frame_length + 1, hop_length):
+        frame = emphasized[start : start + frame_length]
+        windowed = frame * window
+        spectrum = np.abs(np.fft.rfft(windowed, n=n_fft)) ** 2
+        spectrum = spectrum[:128]
+        spectra.append(np.log1p(spectrum).astype(np.float32))
+        frame_energies.append(float(np.mean(windowed**2)))
+        if windowed.size > 1:
+            frame_zcrs.append(float(np.mean(np.signbit(windowed[1:]) != np.signbit(windowed[:-1]))))
+        else:
+            frame_zcrs.append(0.0)
+
+    if not spectra:
+        frame = np.zeros(frame_length, dtype=np.float32)
+        frame[: min(emphasized.size, frame_length)] = emphasized[: min(emphasized.size, frame_length)]
+        windowed = frame * window
+        spectrum = np.abs(np.fft.rfft(windowed, n=n_fft)) ** 2
+        spectra.append(np.log1p(spectrum[:128]).astype(np.float32))
+        frame_energies.append(float(np.mean(windowed**2)))
+        frame_zcrs.append(float(np.mean(np.signbit(windowed[1:]) != np.signbit(windowed[:-1]))) if windowed.size > 1 else 0.0)
+
+    spectral_matrix = np.vstack(spectra)
+    spectral_mean = np.mean(spectral_matrix, axis=0)
+    spectral_std = np.std(spectral_matrix, axis=0)
+    if spectral_matrix.shape[0] > 1:
+        spectral_delta = np.mean(np.diff(spectral_matrix, axis=0), axis=0)
+    else:
+        spectral_delta = np.zeros_like(spectral_mean)
+
     epsilon = 1e-8
     nyquist = max(float(sample_rate) / 2.0, 1.0)
-
-    duration = float(waveform.size) / max(float(sample_rate), 1.0)
-    mean_value = float(np.mean(waveform))
-    std_value = float(np.std(waveform))
-    rms_value = float(np.sqrt(np.mean(np.square(waveform))))
-    abs_mean = float(np.mean(np.abs(waveform)))
-    zcr = float(np.mean(np.signbit(waveform[1:]) != np.signbit(waveform[:-1]))) if waveform.size > 1 else 0.0
-
-    percentiles = np.percentile(waveform, [5, 25, 50, 75, 95]).astype(np.float32)
-    centered = waveform - mean_value
-    if std_value > epsilon:
-        normalized = centered / std_value
-        skewness = float(np.mean(np.power(normalized, 3)))
-        kurtosis = float(np.mean(np.power(normalized, 4)))
-    else:
-        skewness = 0.0
-        kurtosis = 0.0
-
-    if waveform.size > 1:
-        window = np.hanning(waveform.size)
-        spectrum = np.abs(np.fft.rfft(waveform * window))
-        freqs = np.fft.rfftfreq(waveform.size, d=1.0 / float(sample_rate))
-        spectrum_total = float(np.sum(spectrum))
-
-        if spectrum_total > epsilon:
-            centroid_hz = float(np.sum(freqs * spectrum) / spectrum_total)
-            centroid = centroid_hz / nyquist
-            bandwidth = float(np.sqrt(np.sum(np.square(freqs - centroid_hz) * spectrum) / spectrum_total)) / nyquist
-            cumulative = np.cumsum(spectrum)
-            rolloff_index = int(np.searchsorted(cumulative, cumulative[-1] * 0.85)) if cumulative.size else 0
-            rolloff = float(freqs[min(rolloff_index, freqs.size - 1)]) / nyquist if freqs.size else 0.0
-            flatness = float(np.exp(np.mean(np.log(spectrum + epsilon))) / (np.mean(spectrum) + epsilon))
-            band_energy = np.array(
-                [float(np.sum(band)) for band in np.array_split(spectrum, 8)],
-                dtype=np.float32,
-            )
-            band_total = float(np.sum(band_energy))
-            if band_total > epsilon:
-                band_energy /= band_total
-        else:
-            centroid = 0.0
-            bandwidth = 0.0
-            rolloff = 0.0
-            flatness = 0.0
-            band_energy = np.zeros(8, dtype=np.float32)
+    freqs = np.fft.rfftfreq(n_fft, d=1.0 / float(sample_rate))[: spectral_mean.size]
+    spectrum_total = float(np.sum(spectral_mean))
+    if spectrum_total > epsilon:
+        centroid_hz = float(np.sum(freqs * spectral_mean) / spectrum_total)
+        centroid = centroid_hz / nyquist
+        bandwidth = float(np.sqrt(np.sum(np.square(freqs - centroid_hz) * spectral_mean) / spectrum_total)) / nyquist
+        cumulative = np.cumsum(spectral_mean)
+        rolloff_index = int(np.searchsorted(cumulative, cumulative[-1] * 0.85)) if cumulative.size else 0
+        rolloff = float(freqs[min(rolloff_index, freqs.size - 1)]) / nyquist if freqs.size else 0.0
+        flatness = float(np.exp(np.mean(np.log(spectral_mean + epsilon))) / (np.mean(spectral_mean) + epsilon))
     else:
         centroid = 0.0
         bandwidth = 0.0
         rolloff = 0.0
         flatness = 0.0
-        band_energy = np.zeros(8, dtype=np.float32)
 
-    feature_vector = np.array(
+    mean_energy = float(np.mean(frame_energies)) if frame_energies else 0.0
+    std_energy = float(np.std(frame_energies)) if frame_energies else 0.0
+    mean_zcr = float(np.mean(frame_zcrs)) if frame_zcrs else 0.0
+    std_zcr = float(np.std(frame_zcrs)) if frame_zcrs else 0.0
+    rms_value = float(np.sqrt(np.mean(np.square(emphasized))))
+    peak_value = float(np.max(np.abs(emphasized))) if emphasized.size else 0.0
+
+    feature_vector = np.concatenate(
         [
-            duration / 10.0,
-            float(sample_rate) / 48000.0,
-            mean_value,
-            std_value,
-            rms_value,
-            abs_mean,
-            peak,
-            zcr,
-            float(percentiles[0]),
-            float(percentiles[1]),
-            float(percentiles[2]),
-            float(percentiles[3]),
-            float(percentiles[4]),
-            float(np.tanh(skewness)),
-            float(np.tanh(kurtosis / 10.0)),
-            centroid,
-            bandwidth,
-            rolloff,
-            flatness,
-            *band_energy.tolist(),
-        ],
-        dtype=np.float32,
+            spectral_mean,
+            spectral_std,
+            spectral_delta,
+            np.array(
+                [
+                    duration / 10.0,
+                    float(sample_rate) / 48000.0,
+                    mean_energy,
+                    std_energy,
+                    mean_zcr,
+                    std_zcr,
+                    rms_value,
+                    peak_value,
+                    centroid,
+                    bandwidth,
+                    rolloff,
+                    flatness,
+                ],
+                dtype=np.float32,
+            ),
+        ]
     )
     feature_vector = np.nan_to_num(feature_vector, nan=0.0, posinf=0.0, neginf=0.0)
 
@@ -270,6 +306,41 @@ def compute_embedding(audio_base64: str) -> np.ndarray:
 def average_embedding(raw_embeddings: str) -> np.ndarray | None:
     try:
         embeddings = json.loads(raw_embeddings)
+    except Exception:
+        return None
+
+
+def member_similarity_summary(new_embedding: np.ndarray, raw_embeddings: str) -> tuple[float, float, int, float] | None:
+    try:
+        embeddings = json.loads(raw_embeddings)
+    except Exception:
+        return None
+
+    if not embeddings:
+        return None
+
+    try:
+        emb_array = np.asarray(embeddings, dtype=np.float32)
+        if emb_array.ndim != 2 or emb_array.shape[1] != new_embedding.shape[0]:
+            return None
+
+        new_norm = float(np.linalg.norm(new_embedding))
+        if new_norm == 0:
+            return None
+
+        sample_norms = np.linalg.norm(emb_array, axis=1)
+        valid_mask = sample_norms > 0
+        if not np.any(valid_mask):
+            return None
+
+        scores = np.zeros(emb_array.shape[0], dtype=np.float32)
+        scores[valid_mask] = np.dot(emb_array[valid_mask], new_embedding) / (sample_norms[valid_mask] * new_norm)
+
+        best_score = float(np.max(scores))
+        median_score = float(np.median(scores))
+        match_count = int(np.count_nonzero(scores >= PER_SAMPLE_MATCH_THRESHOLD))
+        score_spread = float(np.std(scores))
+        return best_score, median_score, match_count, score_spread
     except Exception:
         return None
 
@@ -363,6 +434,7 @@ class EnrollRequest(BaseModel):
     name: str
     employee_id: str
     samples: list[str]
+    admin_passcode: str
 
 
 class LoginRequest(BaseModel):
@@ -420,9 +492,13 @@ def list_logs(limit: int = Query(default=50, ge=1, le=200)) -> list[dict[str, An
 def enroll_member(req: EnrollRequest) -> dict[str, Any]:
     name = req.name.strip()
     employee_id = req.employee_id.strip()
+    configured = read_setting("admin_passcode", DEFAULT_ADMIN_PASSCODE) or DEFAULT_ADMIN_PASSCODE
 
     if not name or not employee_id:
         raise HTTPException(status_code=400, detail="Name and employee ID are required")
+
+    if req.admin_passcode.strip() != configured:
+        raise HTTPException(status_code=403, detail="Administrator access required")
 
     if len(req.samples) < 5:
         raise HTTPException(status_code=400, detail="Record five voice samples before saving")
@@ -475,25 +551,37 @@ def verify_audio(req: AudioRequest) -> dict[str, Any]:
         ).fetchall()
 
     best_score = 0.0
+    second_best_score = 0.0
     best_member: sqlite3.Row | None = None
 
     for row in rows:
-        avg_embedding = average_embedding(row["embeddings"])
-        if avg_embedding is None:
+        summary = member_similarity_summary(new_embedding, row["embeddings"])
+        if summary is None:
             continue
 
-        score = cosine_similarity(new_embedding, avg_embedding)
+        best_sample_score, median_score, match_count, score_spread = summary
+        if match_count < REQUIRED_SAMPLE_MATCHES:
+            continue
+        if best_sample_score < VERIFY_THRESHOLD or median_score < VERIFY_THRESHOLD:
+            continue
+        if score_spread > MAX_SCORE_SPREAD:
+            continue
+
+        score = median_score
         if score > best_score:
+            second_best_score = best_score
             best_score = score
             best_member = row
+        elif score > second_best_score:
+            second_best_score = score
 
-    if best_score < MIN_VALID_SCORE:
+    if best_member is None or best_score < VERIFY_THRESHOLD or (best_score - second_best_score) < 0.05:
         log_access(None, "Unknown", "denied", float(best_score))
         return {"access": False, "score": float(best_score), "user": "Unknown"}
 
-    access = best_score >= VERIFY_THRESHOLD
-    user_name = best_member["name"] if access and best_member is not None else "Unknown"
-    member_id = best_member["id"] if access and best_member is not None else None
+    access = True
+    user_name = best_member["name"]
+    member_id = best_member["id"]
 
     log_access(member_id, user_name, "granted" if access else "denied", float(best_score))
 

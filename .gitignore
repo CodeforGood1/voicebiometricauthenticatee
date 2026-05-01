@@ -31,6 +31,7 @@ yarn-error.*
 *.pem
 
 # local env files
+.env
 .env*.local
 
 # Python runtime files and local data
@@ -40,6 +41,8 @@ __pycache__/
 *.pyd
 backend/voicebiometric.sqlite3
 backend/*.sqlite3
+backend/voicebiometric.sqlite3-wal
+backend/voicebiometric.sqlite3-shm
 .venv/
 venv/
 ENV/
