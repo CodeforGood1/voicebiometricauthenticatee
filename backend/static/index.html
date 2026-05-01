@@ -58,9 +58,15 @@
         <div class="card-kicker">1. Authenticate</div>
         <h2>Voice access</h2>
         <p>
-          Speak naturally for four seconds. The browser records a sample and submits it for
-          verification.
+          Enter a member name or employee ID, then speak naturally for four seconds. The browser
+          records a sample and checks it only against that selected person.
         </p>
+        <div class="form-grid">
+          <label>
+            Member name or employee ID
+            <input id="verify-identifier" type="text" placeholder="Jane Doe or EMP-001" autocomplete="off" />
+          </label>
+        </div>
         <div class="result-pill" id="auth-result">Idle</div>
         <div class="button-row">
           <button class="primary" id="auth-btn">Verify identity</button>
@@ -100,8 +106,8 @@
               </div>
             </div>
             <p>
-              Capture five voice samples and create a new access profile from the administrator
-              console.
+              Capture six five-second voice samples and create a new access profile from the
+              administrator console. That gives each member about 30 seconds of enrollment audio.
             </p>
             <div class="form-grid">
               <label>

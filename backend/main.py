@@ -22,11 +22,11 @@ BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 DB_PATH = BASE_DIR / "voicebiometric.sqlite3"
 DEFAULT_ADMIN_PASSCODE = "5846"
-VERIFY_THRESHOLD = 0.94
-MIN_VALID_SCORE = 0.65
+VERIFY_THRESHOLD = 0.9
 REQUIRED_SAMPLE_MATCHES = 4
-PER_SAMPLE_MATCH_THRESHOLD = 0.9
-MAX_SCORE_SPREAD = 0.08
+PER_SAMPLE_MATCH_THRESHOLD = 0.88
+MAX_SCORE_SPREAD = 0.12
+ENROLL_SAMPLE_TARGET = 6
 
 STATIC_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -309,6 +309,17 @@ def average_embedding(raw_embeddings: str) -> np.ndarray | None:
     except Exception:
         return None
 
+    if not embeddings:
+        return None
+
+    try:
+        emb_array = np.asarray(embeddings, dtype=np.float32)
+        if emb_array.ndim != 2:
+            return None
+        return np.mean(emb_array, axis=0)
+    except Exception:
+        return None
+
 
 def member_similarity_summary(new_embedding: np.ndarray, raw_embeddings: str) -> tuple[float, float, int, float] | None:
     try:
@@ -344,16 +355,49 @@ def member_similarity_summary(new_embedding: np.ndarray, raw_embeddings: str) ->
     except Exception:
         return None
 
-    if not embeddings:
-        return None
 
-    try:
-        emb_array = np.asarray(embeddings, dtype=np.float32)
-        if emb_array.ndim != 2:
-            return None
-        return np.mean(emb_array, axis=0)
-    except Exception:
-        return None
+def resolve_member_for_verification(connection: sqlite3.Connection, identifier: str) -> sqlite3.Row:
+    normalized = identifier.strip()
+    if not normalized:
+        raise HTTPException(status_code=400, detail="Enter a member name or employee ID")
+
+    row = connection.execute(
+        """
+        SELECT id, name, employee_id, embeddings
+        FROM members
+        WHERE active = 1 AND id = ?
+        """,
+        (normalized,),
+    ).fetchone()
+    if row is not None:
+        return row
+
+    row = connection.execute(
+        """
+        SELECT id, name, employee_id, embeddings
+        FROM members
+        WHERE active = 1 AND employee_id = ?
+        """,
+        (normalized,),
+    ).fetchone()
+    if row is not None:
+        return row
+
+    rows = connection.execute(
+        """
+        SELECT id, name, employee_id, embeddings
+        FROM members
+        WHERE active = 1 AND lower(name) = lower(?)
+        ORDER BY enrolled_at DESC
+        """,
+        (normalized,),
+    ).fetchall()
+    if len(rows) == 1:
+        return rows[0]
+    if len(rows) > 1:
+        raise HTTPException(status_code=409, detail="Member name is ambiguous; use the employee ID")
+
+    raise HTTPException(status_code=404, detail="Member not found")
 
 
 def member_payload(row: sqlite3.Row) -> dict[str, Any]:
@@ -430,6 +474,11 @@ class AudioRequest(BaseModel):
     audio_base64: str
 
 
+class VerifyRequest(BaseModel):
+    audio_base64: str
+    member_identifier: str
+
+
 class EnrollRequest(BaseModel):
     name: str
     employee_id: str
@@ -500,8 +549,8 @@ def enroll_member(req: EnrollRequest) -> dict[str, Any]:
     if req.admin_passcode.strip() != configured:
         raise HTTPException(status_code=403, detail="Administrator access required")
 
-    if len(req.samples) < 5:
-        raise HTTPException(status_code=400, detail="Record five voice samples before saving")
+    if len(req.samples) < ENROLL_SAMPLE_TARGET:
+        raise HTTPException(status_code=400, detail="Record six voice samples before saving")
 
     embeddings: list[list[float]] = []
     for sample in req.samples:
@@ -537,55 +586,27 @@ def enroll_member(req: EnrollRequest) -> dict[str, Any]:
 
 
 @app.post("/api/verify")
-def verify_audio(req: AudioRequest) -> dict[str, Any]:
+def verify_audio(req: VerifyRequest) -> dict[str, Any]:
     new_embedding = compute_embedding(req.audio_base64)
 
     with get_connection() as connection:
-        rows = connection.execute(
-            """
-            SELECT id, name, embeddings
-            FROM members
-            WHERE active = 1
-            ORDER BY enrolled_at DESC
-            """
-        ).fetchall()
+        member = resolve_member_for_verification(connection, req.member_identifier)
 
-    best_score = 0.0
-    second_best_score = 0.0
-    best_member: sqlite3.Row | None = None
+    summary = member_similarity_summary(new_embedding, member["embeddings"])
+    if summary is None:
+        log_access(member["id"], member["name"], "denied", 0.0)
+        return {"access": False, "score": 0.0, "user": member["name"]}
 
-    for row in rows:
-        summary = member_similarity_summary(new_embedding, row["embeddings"])
-        if summary is None:
-            continue
+    best_sample_score, median_score, match_count, score_spread = summary
+    confidence = float(median_score)
 
-        best_sample_score, median_score, match_count, score_spread = summary
-        if match_count < REQUIRED_SAMPLE_MATCHES:
-            continue
-        if best_sample_score < VERIFY_THRESHOLD or median_score < VERIFY_THRESHOLD:
-            continue
-        if score_spread > MAX_SCORE_SPREAD:
-            continue
+    if best_sample_score < VERIFY_THRESHOLD or match_count < REQUIRED_SAMPLE_MATCHES or confidence < VERIFY_THRESHOLD or score_spread > MAX_SCORE_SPREAD:
+        log_access(member["id"], member["name"], "denied", confidence)
+        return {"access": False, "score": confidence, "user": member["name"]}
 
-        score = median_score
-        if score > best_score:
-            second_best_score = best_score
-            best_score = score
-            best_member = row
-        elif score > second_best_score:
-            second_best_score = score
+    log_access(member["id"], member["name"], "granted", confidence)
 
-    if best_member is None or best_score < VERIFY_THRESHOLD or (best_score - second_best_score) < 0.05:
-        log_access(None, "Unknown", "denied", float(best_score))
-        return {"access": False, "score": float(best_score), "user": "Unknown"}
-
-    access = True
-    user_name = best_member["name"]
-    member_id = best_member["id"]
-
-    log_access(member_id, user_name, "granted" if access else "denied", float(best_score))
-
-    return {"access": access, "score": float(best_score), "user": user_name}
+    return {"access": True, "score": confidence, "user": member["name"]}
 
 
 @app.post("/api/members/{member_id}/deactivate")

@@ -1,7 +1,9 @@
 const AUTH_KEY = 'voicebiometric.admin.authed';
 const PASSCODE_KEY = 'voicebiometric.admin.passcode';
-const SAMPLE_TARGET = 5;
-const RECORDING_SECONDS = 4;
+const SAMPLE_TARGET = 6;
+const VERIFY_RECORDING_SECONDS = 4;
+const ENROLL_RECORDING_SECONDS = 5;
+const ENROLL_TOTAL_SECONDS = SAMPLE_TARGET * ENROLL_RECORDING_SECONDS;
 
 const state = {
   samples: [],
@@ -46,7 +48,7 @@ function setRuntimeNote(message) {
 
 function updateSampleUi() {
   const count = state.samples.length;
-  els.sampleCount.textContent = `${count} of ${SAMPLE_TARGET} samples captured`;
+  els.sampleCount.textContent = `${count} of ${SAMPLE_TARGET} samples captured (~${ENROLL_TOTAL_SECONDS} seconds total)`;
   els.sampleBtn.textContent = count >= SAMPLE_TARGET ? 'Sample limit reached' : `Capture sample ${count + 1}`;
   els.sampleBtn.disabled = state.recording || count >= SAMPLE_TARGET;
   els.saveBtn.disabled = count < SAMPLE_TARGET || state.recording;
@@ -154,7 +156,7 @@ async function blobToBase64(blob) {
   });
 }
 
-async function recordWavBase64(durationMs = RECORDING_SECONDS * 1000) {
+async function recordWavBase64(durationMs = VERIFY_RECORDING_SECONDS * 1000) {
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
     throw new Error('This browser does not support microphone capture.');
   }
@@ -320,6 +322,14 @@ async function authenticateVoice() {
     return;
   }
 
+  const memberIdentifier = els.verifyIdentifier.value.trim();
+
+  if (!memberIdentifier) {
+    setAuthResult('Enter a name or employee ID.', 'danger');
+    setGlobalStatus('Select the person to verify first.', 'warning');
+    return;
+  }
+
   state.recording = true;
   els.authBtn.disabled = true;
   els.authClearBtn.disabled = true;
@@ -336,7 +346,10 @@ async function authenticateVoice() {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ audio_base64: audioBase64 }),
+      body: JSON.stringify({
+        audio_base64: audioBase64,
+        member_identifier: memberIdentifier,
+      }),
     });
 
     if (result.access) {
@@ -374,7 +387,7 @@ function resetSamples() {
 
   state.samples = [];
   updateSampleUi();
-  setEnrollMessage('Capture five samples before saving.', 'neutral');
+  setEnrollMessage('Capture six samples before saving.', 'neutral');
 }
 
 async function recordSample() {
@@ -396,14 +409,14 @@ async function recordSample() {
 
   state.recording = true;
   updateSampleUi();
-  setEnrollMessage(`Recording sample ${state.samples.length + 1}...`, 'warning');
+  setEnrollMessage(`Recording sample ${state.samples.length + 1} of ${SAMPLE_TARGET}...`, 'warning');
   setGlobalStatus('Capturing an enrollment sample.', 'warning');
 
   try {
-    const audioBase64 = await recordWavBase64();
+    const audioBase64 = await recordWavBase64(ENROLL_RECORDING_SECONDS * 1000);
     state.samples.push(audioBase64);
     updateSampleUi();
-    setEnrollMessage(`Sample ${state.samples.length} captured. Record ${Math.max(SAMPLE_TARGET - state.samples.length, 0)} more.`, 'success');
+    setEnrollMessage(`Sample ${state.samples.length} captured. Record ${Math.max(SAMPLE_TARGET - state.samples.length, 0)} more to reach about ${ENROLL_TOTAL_SECONDS} seconds total.`, 'success');
     setGlobalStatus(`Enrollment sample ${state.samples.length} captured.`, 'success');
   } catch (error) {
     setEnrollMessage(error.message || 'Failed to capture sample.', 'danger');
@@ -428,7 +441,7 @@ async function saveMember() {
   }
 
   if (state.samples.length < SAMPLE_TARGET) {
-    setEnrollMessage('Capture five samples before saving.', 'warning');
+    setEnrollMessage('Capture six samples before saving.', 'warning');
     return;
   }
 
@@ -558,15 +571,21 @@ function bindEvents() {
     }
   });
 
+  els.verifyIdentifier.addEventListener('keydown', event => {
+    if (event.key === 'Enter') {
+      authenticateVoice();
+    }
+  });
+
   els.memberName.addEventListener('input', () => {
     if (state.samples.length === 0) {
-      setEnrollMessage('Capture five samples before saving.', 'neutral');
+      setEnrollMessage('Capture six samples before saving.', 'neutral');
     }
   });
 
   els.memberId.addEventListener('input', () => {
     if (state.samples.length === 0) {
-      setEnrollMessage('Capture five samples before saving.', 'neutral');
+      setEnrollMessage('Capture six samples before saving.', 'neutral');
     }
   });
 }
@@ -577,6 +596,7 @@ async function bootstrap() {
   els.authResult = $('auth-result');
   els.authBtn = $('auth-btn');
   els.authClearBtn = $('auth-clear-btn');
+  els.verifyIdentifier = $('verify-identifier');
   els.memberName = $('member-name');
   els.memberId = $('member-id');
   els.sampleCount = $('sample-count');
@@ -605,7 +625,7 @@ async function bootstrap() {
   setEnrollMessage(
     state.adminAuthed
       ? 'Administrator access granted. Enroll members using the form below.'
-      : 'Administrator access required to enroll members.',
+      : 'Administrator access required to enroll members. Capture six five-second samples for about 30 seconds total.',
     state.adminAuthed ? 'success' : 'neutral'
   );
 
