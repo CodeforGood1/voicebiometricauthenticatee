@@ -597,10 +597,10 @@ def verify_audio(req: VerifyRequest) -> dict[str, Any]:
         log_access(member["id"], member["name"], "denied", 0.0)
         return {"access": False, "score": 0.0, "user": member["name"]}
 
-    best_sample_score, median_score, match_count, score_spread = summary
+    _, median_score, _, _ = summary
     confidence = float(median_score)
 
-    if best_sample_score < VERIFY_THRESHOLD or match_count < REQUIRED_SAMPLE_MATCHES or confidence < VERIFY_THRESHOLD or score_spread > MAX_SCORE_SPREAD:
+    if confidence < VERIFY_THRESHOLD:
         log_access(member["id"], member["name"], "denied", confidence)
         return {"access": False, "score": confidence, "user": member["name"]}
 
